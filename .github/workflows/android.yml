@@ -1,4 +1,4 @@
-name: Generate Production Keystore
+name: Build Android Release APK (Cafe Bazaar)
 
 on:
   push:
@@ -6,29 +6,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  create-key:
+  build:
     runs-on: ubuntu-latest
+
     steps:
-    - name: Generate Key Using Keytool
-      run: |
-        keytool -genkey -v \
-          -keystore hamed_release_key.jks \
-          -alias hamedkhan978 \
-          -keyalg RSA \
-          -keysize 2048 \
-          -validity 10000 \
-          -storepass "86598Hsh@!" \
-          -keypass "86598Hsh@!" \
-          -dname "CN=Hamed, O=Production, C=IR"
+    - name: Checkout Code
+      uses: actions/checkout@v4
 
-    - name: Convert Keystore to Base64 Text
-      run: |
-        base64 -w 0 hamed_release_key.jks > keystore_base64.txt
+    - name: Set up JDK 17
+      uses: actions/setup-java@v4
+      with:
+        java-version: '17'
+        distribution: 'temurin'
+        cache: gradle
 
-    - name: Upload Keystore and Base64 Text
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
+
+    - name: Build Release APK
+      run: ./gradlew assembleRelease
+
+    - name: Sign APK
+      uses: rorga/android-sign-release-apk@v1
+      with:
+        releaseDirectory: app/build/outputs/apk/release
+        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
+        alias: ${{ secrets.ALIAS }}
+        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
+        keyPassword: ${{ secrets.KEY_PASSWORD }}
+
+    - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
       with:
-        name: my-secure-keystore
-        path: |
-          hamed_release_key.jks
-          keystore_base64.txt
+        name: app-release-signed
+        path: app/build/outputs/apk/release/*-signed.apk
