@@ -14,10 +14,6 @@ enum class DueDateFilter {
     ALL, TODAY, UPCOMING, OVERDUE
 }
 
-enum class CompletionFilter {
-    ALL, INCOMPLETE, COMPLETED
-}
-
 enum class SortOption {
     DUE_DATE, DESCRIPTION, CREATION
 }
@@ -27,9 +23,6 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
     
     private val _filterDueDate = MutableStateFlow(DueDateFilter.ALL)
     val filterDueDate: StateFlow<DueDateFilter> = _filterDueDate.asStateFlow()
-
-    private val _filterCompletion = MutableStateFlow(CompletionFilter.ALL)
-    val filterCompletion: StateFlow<CompletionFilter> = _filterCompletion.asStateFlow()
 
     private val _sortBy = MutableStateFlow(SortOption.DUE_DATE)
     val sortBy: StateFlow<SortOption> = _sortBy.asStateFlow()
@@ -43,19 +36,11 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         uiState = combine(
             repository.allTasks,
             _filterDueDate,
-            _filterCompletion,
             _sortBy
-        ) { tasks, dueDateFilter, completionFilter, sortOption ->
+        ) { tasks, dueDateFilter, sortOption ->
             var filtered = tasks
 
-            // 1. Filter by Completion Status
-            filtered = when (completionFilter) {
-                CompletionFilter.ALL -> filtered
-                CompletionFilter.INCOMPLETE -> filtered.filter { !it.isCompleted }
-                CompletionFilter.COMPLETED -> filtered.filter { it.isCompleted }
-            }
-
-            // 2. Filter by Due Date
+            // 1. Filter by Due Date
             filtered = when (dueDateFilter) {
                 DueDateFilter.ALL -> filtered
                 DueDateFilter.TODAY -> filtered.filter { isToday(it.targetDate) }
@@ -63,7 +48,7 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
                 DueDateFilter.OVERDUE -> filtered.filter { isOverdue(it.targetDate) }
             }
 
-            // 3. Sort tasks
+            // 2. Sort tasks
             when (sortOption) {
                 SortOption.DUE_DATE -> filtered.sortedBy { it.targetDate }
                 SortOption.DESCRIPTION -> filtered.sortedBy { it.description.lowercase() }
@@ -78,10 +63,6 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
 
     fun setFilterDueDate(filter: DueDateFilter) {
         _filterDueDate.value = filter
-    }
-
-    fun setFilterCompletion(filter: CompletionFilter) {
-        _filterCompletion.value = filter
     }
 
     fun setSortBy(option: SortOption) {
