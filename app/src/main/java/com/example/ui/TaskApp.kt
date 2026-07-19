@@ -40,6 +40,7 @@ fun TaskApp(
 ) {
     val tasks by viewModel.uiState.collectAsStateWithLifecycle()
     val filterDueDate by viewModel.filterDueDate.collectAsStateWithLifecycle()
+    val filterCompletion by viewModel.filterCompletion.collectAsStateWithLifecycle()
     val sortBy by viewModel.sortBy.collectAsStateWithLifecycle()
 
     var isAddSheetOpen by remember { mutableStateOf(false) }
@@ -396,8 +397,7 @@ fun TaskRow(
     onClick: () -> Unit
 ) {
     val formattedDate = remember(task.targetDate) {
-        val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-        sdf.format(Date(task.targetDate))
+        JalaliCalendarHelper.getJalaliDate(task.targetDate)
     }
 
     Card(
@@ -425,7 +425,7 @@ fun TaskRow(
                 },
                 colors = CheckboxDefaults.colors(
                     checkedColor = MaterialTheme.colorScheme.primary,
-                    checkmarkColor = MaterialTheme.onPrimary,
+                    checkmarkColor = MaterialTheme.colorScheme.onPrimary,
                     uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 ),
                 modifier = Modifier
@@ -484,12 +484,11 @@ fun TaskFormBottomSheet(
 ) {
     var description by remember { mutableStateOf(task?.description ?: "") }
     var selectedDate by remember { mutableStateOf(task?.targetDate ?: System.currentTimeMillis()) }
-    val isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
+    var isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
     var isDatePickerOpen by remember { mutableStateOf(false) }
 
     val formattedDate = remember(selectedDate) {
-        val sdf = SimpleDateFormat("yyyy/MM/dd", Locale.getDefault())
-        sdf.format(Date(selectedDate))
+        JalaliCalendarHelper.getJalaliDate(selectedDate)
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -631,3 +630,4 @@ fun TaskFormBottomSheet(
         }
     }
 }
+
