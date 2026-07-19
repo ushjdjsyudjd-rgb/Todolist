@@ -34,34 +34,53 @@ jobs:
         chmod +x gradlew
         echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
 
-    - name: Decode Keystore
+    - name: Decode Keystore in Every Possible Location
       run: |
-        cd "${{ env.PROJECT_PATH }}"
+        # ۱. ساخت فایل امضا در روت اصلی گیت‌هاب (دقیقاً جایی که گریدل در ارور به آن اشاره کرده)
+        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
+        
+        # ۲. ساخت فایل در پوشه داخلی پروژه (پوشه پیدا شده توسط اسکریپت)
+        cp my-upload-key.jks "${{ env.PROJECT_PATH }}/my-upload-key.jks"
+        cp hamed_release_key.jks "${{ env.PROJECT_PATH }}/hamed_release_key.jks"
+        
+        # ۳. ساخت فایل داخل پوشه app پروژه
+        if [ -d "${{ env.PROJECT_PATH }}/app" ]; then
+          cp my-upload-key.jks "${{ env.PROJECT_PATH }}/app/my-upload-key.jks"
+          cp hamed_release_key.jks "${{ env.PROJECT_PATH }}/app/hamed_release_key.jks"
+        fi
 
-    - name: Build Unsigned Release APK
+    - name: Inject Properties to local.properties
+      run: |
+        # تزریق رمزها به فایل تنظیمات در هر دو مسیر اصلی و فرعی
+        echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" >> local.properties
+        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
+        echo "keyAlias=${{ secrets.ALIAS }}" >> local.properties
+        echo "storeFile=my-upload-key.jks" >> local.properties
+        
+        cp local.properties "${{ env.PROJECT_PATH }}/local.properties"
+        if [ -d "${{ env.PROJECT_PATH }}/app" ]; then
+          cp local.properties "${{ env.PROJECT_PATH }}/app/local.properties"
+        fi
+
+    - name: Build Release APK
       run: |
         cd "${{ env.PROJECT_PATH }}"
-        # با این دستور به گریدل می‌گوییم کاری به امضا نداشته باشد و فقط فایل را آپتیمایز و بیلد کند
-        ./gradlew assembleRelease -Pandroid.injected.signing.config.file=""
+        ./gradlew assembleRelease
 
-    - name: Sign APK using apksigner
+    - name: Sign APK (Extra Security)
       run: |
         cd "${{ env.PROJECT_PATH }}"
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
+        APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
         
-        # پیدا کردن فایل APK بیلد شده (چهunsigned باشد چه نباشد)
-        UNSIGNED_APK=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
-        echo "Found APK to sign: $UNSIGNED_APK"
-        
-        # امضای نهایی و دستی با کلید رسمی شما
         $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign \
-          --ks hamed_release_key.jks \
+          --ks app/my-upload-key.jks \
           --ks-key-alias "${{ secrets.ALIAS }}" \
           --ks-pass pass:"${{ secrets.KEY_STORE_PASSWORD }}" \
           --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
           --out app/build/outputs/apk/release/app-release-signed.apk \
-          $UNSIGNED_APK
+          $APK_PATH
 
     - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
