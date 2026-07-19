@@ -35,10 +35,11 @@ jobs:
         chmod +x gradlew
         echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
 
-    - name: Decode Keystore (Prepare for Build)
+    - name: Decode Keystore and Inject Properties
       run: |
         cd "${{ env.PROJECT_PATH }}"
-        # ساخت فایل کلید با هر دو نام احتمالی برای پوشش کامل تنظیمات گریدل شما
+        
+        # ۱. ساخت فایل‌های کلید در تمام مسیرهای احتمالی پروژه
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
         
@@ -46,16 +47,20 @@ jobs:
           cp my-upload-key.jks app/my-upload-key.jks
           cp hamed_release_key.jks app/hamed_release_key.jks
         fi
+        
+        # ۲. ساخت فایل local.properties و تزریق مستقیم رمزها با نام‌های استاندارد گریدل
+        # این کار گریدل را مجبور می‌کند که رمزها را مستقیماً از اینجا بخواند
+        echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" >> local.properties
+        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
+        echo "keyAlias=${{ secrets.ALIAS }}" >> local.properties
+        echo "storeFile=my-upload-key.jks" >> local.properties
+        
+        # کپی کردن در پوشه app برای اطمینان بیشتر
+        if [ -d "app" ]; then
+          cp local.properties app/local.properties
+        fi
 
     - name: Build Release APK
-      env:
-        # تزریق مستقیم تمام متغیرهای رمز به ساختار گریدل با نام‌های مختلف برای رفع خطای بیلد
-        KEYSTORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        KEY_ALIAS: ${{ secrets.ALIAS }}
-        MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
-        MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
-        MYAPP_RELEASE_KEY_ALIAS: ${{ secrets.ALIAS }}
       run: |
         cd "${{ env.PROJECT_PATH }}"
         ./gradlew assembleRelease
