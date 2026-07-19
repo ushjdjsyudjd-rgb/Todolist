@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Generate Production Keystore
 
 on:
   push:
@@ -6,35 +6,29 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  create-key:
     runs-on: ubuntu-latest
-
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v4
-
-    - name: Set up JDK 17
-      uses: actions/setup-java@v4
-      with:
-        java-version: '17'
-        distribution: 'temurin'
-        cache: gradle
-
-    - name: Initialize Gradle Wrapper
-      run: gradle wrapper
-
-    - name: Generate Dummy Keystore for Build
+    - name: Generate Key Using Keytool
       run: |
-        keytool -genkey -v -keystore debug.keystore -storepass android -alias androiddebugkey -keypass android -keyalg RSA -keysize 2048 -validity 10000 -dname "CN=Android Debug,O=Android,C=US"
+        keytool -genkey -v \
+          -keystore hamed_release_key.jks \
+          -alias hamedkhan978 \
+          -keyalg RSA \
+          -keysize 2048 \
+          -validity 10000 \
+          -storepass "86598Hsh@!" \
+          -keypass "86598Hsh@!" \
+          -dname "CN=Hamed, O=Production, C=IR"
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+    - name: Convert Keystore to Base64 Text
+      run: |
+        base64 -w 0 hamed_release_key.jks > keystore_base64.txt
 
-    - name: Build APK
-      run: ./gradlew assembleDebug
-
-    - name: Upload APK Artifact
+    - name: Upload Keystore and Base64 Text
       uses: actions/upload-artifact@v4
       with:
-        name: app-debug
-        path: app/build/outputs/apk/debug/app-debug.apk
+        name: my-secure-keystore
+        path: |
+          hamed_release_key.jks
+          keystore_base64.txt
