@@ -20,48 +20,24 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Find Project Root and Fix Gradle Wrapper
+    - name: Decode Keystore (Prepare for Build)
       run: |
-        # پیدا کردن پوشه‌ای که فایل build.gradle در آن قرار دارد
-        PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
-        echo "Project directory found at: $PROJECT_DIR"
-        cd $PROJECT_DIR
-        
-        # اگر فایل gradlew وجود نداشت، آن را به صورت خودکار ایجاد کن
-        if [ ! -f "gradlew" ]; then
-          echo "gradlew not found, initializing gradle wrapper..."
-          gradle wrapper
-        fi
-        
-        # دادن مجوز دسترسی اجرایی
-        chmod +x gradlew
-        
-        # ذخیره مسیر پروژه برای مراحل بعدی
-        echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
+        # این مرحله کلید را دقیقاً در روت پروژه (جایی که گریدل دنبالش می‌گردد) می‌سازد
+        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
+
+    - name: Grant execute permission for gradlew
+      run: chmod +x gradlew
 
     - name: Build Release APK
-      run: |
-        cd ${{ env.PROJECT_PATH }}
-        ./gradlew assembleRelease
+      run: ./gradlew assembleRelease
 
-    - name: Decode and Setup Keystore
+    - name: Sign APK (Extra Security)
       run: |
-        cd ${{ env.PROJECT_PATH }}
-        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > release-key.jks
-
-    - name: Sign APK using apksigner
-      run: |
-        cd ${{ env.PROJECT_PATH }}
-        
-        # پیدا کردن مسیر ابزارهای رسمی اندروید
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
-        
-        # پیدا کردن فایل APK بیلد شده
         APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
         
-        # امضای نهایی فایل با اطلاعات شما
         $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign \
-          --ks release-key.jks \
+          --ks my-upload-key.jks \
           --ks-key-alias "${{ secrets.ALIAS }}" \
           --ks-pass pass:"${{ secrets.KEY_STORE_PASSWORD }}" \
           --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
@@ -72,4 +48,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-release-signed
-        path: "**/app/build/outputs/apk/release/app-release-signed.apk"
+        path: app/build/outputs/apk/release/app-release-signed.apk
