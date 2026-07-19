@@ -26,14 +26,32 @@ jobs:
     - name: Build Release APK
       run: ./gradlew assembleRelease
 
-    - name: Sign APK
-      uses: rorga/android-sign-release-apk@v1
+    - name: Decode and Setup Keystore
+      run: |
+        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > app/release-key.jks
+
+    - name: Sign APK using apksigner
+      run: |
+        # پیدا کردن مسیر ابزارهای اندروید و اجرای apksigner رسمی
+        BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
+        
+        # پیدا کردن فایل APK بیلد شده
+        APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
+        
+        # امضای فایل APK با اطلاعات شما
+        $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign \
+          --ks app/release-key.jks \
+          --ks-key-alias "${{ secrets.ALIAS }}" \
+          --ks-pass pass:"${{ secrets.KEY_STORE_PASSWORD }}" \
+          --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
+          --out app/build/outputs/apk/release/app-release-signed.apk \
+          $APK_PATH
+
+    - name: Upload Release APK Artifact
+      uses: actions/upload-artifact@v4
       with:
-        releaseDirectory: app/build/outputs/apk/release
-        signingKeyBase64: ${{ secrets.SIGNING_KEY }}
-        alias: ${{ secrets.ALIAS }}
-        keyStorePassword: ${{ secrets.KEY_STORE_PASSWORD }}
-        keyPassword: ${{ secrets.KEY_PASSWORD }}
+        name: app-release-signed
+        path: app/build/outputs/apk/release/app-release-signed.apk
 
     - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
