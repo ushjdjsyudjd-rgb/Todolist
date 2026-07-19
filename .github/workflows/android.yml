@@ -20,33 +20,55 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Decode Keystore and Inject Properties
+    - name: Auto-Detect Project Root and Setup Files
       run: |
-        # ۱. ساخت فایل‌های کلید مستقیماً در پوشه اصلی مخزن
+        # پیدا کردن پوشه‌ای که فایل بیلد اصلی اندروید در آن قرار دارد
+        PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
+        echo "Android project directory detected at: $PROJECT_DIR"
+        
+        # ذخیره کردن آدرس پوشه برای گام‌های بعدی
+        echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
+        
+        # ورود به پوشه پروژه اندروید
+        cd "$PROJECT_DIR"
+        
+        # اگر فایل gradlew وجود نداشت، آن را بساز
+        if [ ! -f "gradlew" ]; then
+          echo "gradlew not found locally, initializing gradle wrapper..."
+          gradle wrapper
+        fi
+        
+        # دادن مجوز اجرایی به گریدل
+        chmod +x gradlew
+        
+        # ساخت فایل‌های کلید دقیقا در پوشه‌ای که گریدل می‌خواهد
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
         
-        # ۲. ساخت فایل تنظیمات رمزها برای گریدل در پوشه اصلی
+        # کپی در پوشه app در صورت وجود
+        if [ -d "app" ]; then
+          cp my-upload-key.jks app/my-upload-key.jks
+          cp hamed_release_key.jks app/hamed_release_key.jks
+        fi
+        
+        # ساخت فایل تنظیمات محلی در پوشه پروژه
         echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" >> local.properties
         echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
         echo "keyAlias=${{ secrets.ALIAS }}" >> local.properties
         echo "storeFile=my-upload-key.jks" >> local.properties
         
-        # ۳. انتقال یک نسخه به پوشه app در صورت وجود، بدون خطای کپی تکراری
         if [ -d "app" ]; then
-          cp my-upload-key.jks app/my-upload-key.jks
-          cp hamed_release_key.jks app/hamed_release_key.jks
           cp local.properties app/local.properties
         fi
 
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
-
     - name: Build Release APK
-      run: ./gradlew assembleRelease
+      run: |
+        cd "${{ env.PROJECT_PATH }}"
+        ./gradlew assembleRelease
 
     - name: Sign APK (Extra Security)
       run: |
+        cd "${{ env.PROJECT_PATH }}"
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
         APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
         
