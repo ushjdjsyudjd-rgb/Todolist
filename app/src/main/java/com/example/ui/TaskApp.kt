@@ -40,7 +40,6 @@ fun TaskApp(
 ) {
     val tasks by viewModel.uiState.collectAsStateWithLifecycle()
     val filterDueDate by viewModel.filterDueDate.collectAsStateWithLifecycle()
-    val filterCompletion by viewModel.filterCompletion.collectAsStateWithLifecycle()
     val sortBy by viewModel.sortBy.collectAsStateWithLifecycle()
 
     var isAddSheetOpen by remember { mutableStateOf(false) }
@@ -93,8 +92,6 @@ fun TaskApp(
                 FilterAndSortHeader(
                     currentDueDateFilter = filterDueDate,
                     onDueDateFilterChange = { viewModel.setFilterDueDate(it) },
-                    currentCompletionFilter = filterCompletion,
-                    onCompletionFilterChange = { viewModel.setFilterCompletion(it) },
                     currentSortOption = sortBy,
                     onSortOptionChange = { viewModel.setSortBy(it) }
                 )
@@ -248,8 +245,6 @@ fun TaskApp(
 fun FilterAndSortHeader(
     currentDueDateFilter: DueDateFilter,
     onDueDateFilterChange: (DueDateFilter) -> Unit,
-    currentCompletionFilter: CompletionFilter,
-    onCompletionFilterChange: (CompletionFilter) -> Unit,
     currentSortOption: SortOption,
     onSortOptionChange: (SortOption) -> Unit
 ) {
@@ -319,42 +314,7 @@ fun FilterAndSortHeader(
                     .padding(top = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                // 1. Completion Status Filter Row
-                Column {
-                    Text(
-                        text = "وضعیت انجام:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        CompletionFilter.values().forEach { filter ->
-                            val label = when (filter) {
-                                CompletionFilter.ALL -> "همه"
-                                CompletionFilter.INCOMPLETE -> "انجام نشده"
-                                CompletionFilter.COMPLETED -> "انجام شده"
-                            }
-                            val isSelected = filter == currentCompletionFilter
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onCompletionFilterChange(filter) },
-                                label = { Text(label, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
-                        }
-                    }
-                }
-
-                // 2. Due Date Filter Row
+                // 1. Due Date Filter Row
                 Column {
                     Text(
                         text = "بازه زمانی:",
@@ -389,7 +349,7 @@ fun FilterAndSortHeader(
                     }
                 }
 
-                // 3. Sort Options Row
+                // 2. Sort Options Row
                 Column {
                     Text(
                         text = "مرتب‌سازی بر اساس:",
@@ -465,7 +425,7 @@ fun TaskRow(
                 },
                 colors = CheckboxDefaults.colors(
                     checkedColor = MaterialTheme.colorScheme.primary,
-                    checkmarkColor = MaterialTheme.colorScheme.onPrimary,
+                    checkmarkColor = MaterialTheme.onPrimary,
                     uncheckedColor = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
                 ),
                 modifier = Modifier
@@ -524,7 +484,7 @@ fun TaskFormBottomSheet(
 ) {
     var description by remember { mutableStateOf(task?.description ?: "") }
     var selectedDate by remember { mutableStateOf(task?.targetDate ?: System.currentTimeMillis()) }
-    var isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
+    val isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
     var isDatePickerOpen by remember { mutableStateOf(false) }
 
     val formattedDate = remember(selectedDate) {
@@ -606,34 +566,6 @@ fun TaskFormBottomSheet(
                     }
                 }
 
-                if (task != null) {
-                    // Task Completion Switch for Editing Mode
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .clip(RoundedCornerShape(12.dp))
-                            .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
-                            .padding(horizontal = 16.dp, vertical = 12.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
-                        Text(
-                            text = "وضعیت کار (انجام شده)",
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
-                        Switch(
-                            checked = isCompleted,
-                            onCheckedChange = { isCompleted = it },
-                            colors = SwitchDefaults.colors(
-                                checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
-                                checkedTrackColor = MaterialTheme.colorScheme.primary
-                            )
-                        )
-                    }
-                }
-
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
@@ -699,4 +631,3 @@ fun TaskFormBottomSheet(
         }
     }
 }
-
