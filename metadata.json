@@ -1,0 +1,6 @@
+{
+  "name": "Todo List",
+  "description": "A modern slate dark UI To-Do Note list with a task description input, date picker, and confirmation logic.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
