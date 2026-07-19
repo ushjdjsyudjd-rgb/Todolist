@@ -22,56 +22,52 @@ jobs:
 
     - name: Auto-Detect Project Root and Setup Files
       run: |
-        # پیدا کردن پوشه‌ای که فایل بیلد اصلی اندروید در آن قرار دارد
         PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
         echo "Android project directory detected at: $PROJECT_DIR"
-        
-        # ذخیره کردن آدرس پوشه برای گام‌های بعدی
         echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
         
-        # ورود به پوشه پروژه اندروید
         cd "$PROJECT_DIR"
         
-        # اگر فایل gradlew وجود نداشت، آن را بساز
         if [ ! -f "gradlew" ]; then
-          echo "gradlew not found locally, initializing gradle wrapper..."
           gradle wrapper
         fi
-        
-        # دادن مجوز اجرایی به گریدل
         chmod +x gradlew
         
-        # ساخت فایل‌های کلید دقیقا در پوشه‌ای که گریدل می‌خواهد
+        # ساخت فایل کلید با هر دو نام احتمالی در پوشه اصلی پروژه اندروید و پوشه app
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
         
-        # کپی در پوشه app در صورت وجود
         if [ -d "app" ]; then
           cp my-upload-key.jks app/my-upload-key.jks
           cp hamed_release_key.jks app/hamed_release_key.jks
         fi
-        
-        # ساخت فایل تنظیمات محلی در پوشه پروژه
-        echo "storePassword=${{ secrets.KEY_STORE_PASSWORD }}" >> local.properties
-        echo "keyPassword=${{ secrets.KEY_PASSWORD }}" >> local.properties
-        echo "keyAlias=${{ secrets.ALIAS }}" >> local.properties
-        echo "storeFile=my-upload-key.jks" >> local.properties
-        
-        if [ -d "app" ]; then
-          cp local.properties app/local.properties
-        fi
 
-    - name: Build Release APK
+    - name: Build Release APK with Direct Properties
       run: |
         cd "${{ env.PROJECT_PATH }}"
-        ./gradlew assembleRelease
+        
+        # تزریق مستقیم و مستقیم پارامترها به بدنه گریدل برای دور زدن محدودیت فایل‌ها
+        ./gradlew assembleRelease \
+          -Pandroid.injected.signing.config.file="" \
+          -PstoreFile=my-upload-key.jks \
+          -PstorePassword="${{ secrets.KEY_STORE_PASSWORD }}" \
+          -PkeyAlias="${{ secrets.ALIAS }}" \
+          -PkeyPassword="${{ secrets.KEY_PASSWORD }}" \
+          -Pandroid.signingConfigs.release.storeFile=my-upload-key.jks \
+          -Pandroid.signingConfigs.release.storePassword="${{ secrets.KEY_STORE_PASSWORD }}" \
+          -Pandroid.signingConfigs.release.keyAlias="${{ secrets.ALIAS }}" \
+          -Pandroid.signingConfigs.release.keyPassword="${{ secrets.KEY_PASSWORD }}"
 
-    - name: Sign APK (Extra Security)
+    - name: Sign APK (Extra Security for Cafe Bazaar)
       run: |
         cd "${{ env.PROJECT_PATH }}"
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
-        APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
         
+        # پیدا کردن فایل APK بیلد شده
+        APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
+        echo "Found APK to sign: $APK_PATH"
+        
+        # امضای دستی نهایی با apksigner رسمی اندروید
         $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign \
           --ks my-upload-key.jks \
           --ks-key-alias "${{ secrets.ALIAS }}" \
