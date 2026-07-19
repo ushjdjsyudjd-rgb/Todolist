@@ -22,34 +22,40 @@ jobs:
 
     - name: Find Project Root and Fix Gradle Wrapper
       run: |
-        # پیدا کردن پوشه‌ای که فایل build.gradle در آن قرار دارد
         PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
         echo "Project directory found at: $PROJECT_DIR"
         
         cd "$PROJECT_DIR"
         
-        # اگر فایل gradlew وجود نداشت، آن را ایجاد کن
         if [ ! -f "gradlew" ]; then
           echo "gradlew not found, initializing gradle wrapper..."
           gradle wrapper
         fi
         
         chmod +x gradlew
-        # ذخیره مسیر پروژه برای مراحل بعدی
         echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
 
     - name: Decode Keystore (Prepare for Build)
       run: |
         cd "${{ env.PROJECT_PATH }}"
-        # ساخت کلید در همان پوشه‌ای که فایل build.gradle و فایل‌های گریدل قرار دارند
+        # ساخت فایل کلید با هر دو نام احتمالی برای پوشش کامل تنظیمات گریدل شما
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
+        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
         
-        # یک نسخه هم برای اطمینان در پوشه app کپی می‌کنیم
         if [ -d "app" ]; then
           cp my-upload-key.jks app/my-upload-key.jks
+          cp hamed_release_key.jks app/hamed_release_key.jks
         fi
 
     - name: Build Release APK
+      env:
+        # تزریق مستقیم تمام متغیرهای رمز به ساختار گریدل با نام‌های مختلف برای رفع خطای بیلد
+        KEYSTORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        KEY_ALIAS: ${{ secrets.ALIAS }}
+        MYAPP_RELEASE_STORE_PASSWORD: ${{ secrets.KEY_STORE_PASSWORD }}
+        MYAPP_RELEASE_KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
+        MYAPP_RELEASE_KEY_ALIAS: ${{ secrets.ALIAS }}
       run: |
         cd "${{ env.PROJECT_PATH }}"
         ./gradlew assembleRelease
