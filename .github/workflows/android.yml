@@ -20,19 +20,43 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
+    - name: Find Project Root and Fix Gradle Wrapper
+      run: |
+        # پیدا کردن پوشه‌ای که فایل build.gradle در آن قرار دارد
+        PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
+        echo "Project directory found at: $PROJECT_DIR"
+        
+        cd "$PROJECT_DIR"
+        
+        # اگر فایل gradlew وجود نداشت، آن را ایجاد کن
+        if [ ! -f "gradlew" ]; then
+          echo "gradlew not found, initializing gradle wrapper..."
+          gradle wrapper
+        fi
+        
+        chmod +x gradlew
+        # ذخیره مسیر پروژه برای مراحل بعدی
+        echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
+
     - name: Decode Keystore (Prepare for Build)
       run: |
-        # این مرحله کلید را دقیقاً در روت پروژه (جایی که گریدل دنبالش می‌گردد) می‌سازد
+        cd "${{ env.PROJECT_PATH }}"
+        # ساخت کلید در همان پوشه‌ای که فایل build.gradle و فایل‌های گریدل قرار دارند
         echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
-
-    - name: Grant execute permission for gradlew
-      run: chmod +x gradlew
+        
+        # یک نسخه هم برای اطمینان در پوشه app کپی می‌کنیم
+        if [ -d "app" ]; then
+          cp my-upload-key.jks app/my-upload-key.jks
+        fi
 
     - name: Build Release APK
-      run: ./gradlew assembleRelease
+      run: |
+        cd "${{ env.PROJECT_PATH }}"
+        ./gradlew assembleRelease
 
     - name: Sign APK (Extra Security)
       run: |
+        cd "${{ env.PROJECT_PATH }}"
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
         APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" ! -name "*unsigned*" | head -n 1)
         
@@ -48,4 +72,4 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: app-release-signed
-        path: app/build/outputs/apk/release/app-release-signed.apk
+        path: "**/app/build/outputs/apk/release/app-release-signed.apk"
