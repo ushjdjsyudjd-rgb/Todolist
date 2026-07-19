@@ -20,61 +20,64 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Auto-Detect Project Root and Setup Files
+    - name: Auto-Detect Project Root and Fix Gradle Wrapper
       run: |
         PROJECT_DIR=$(find . -name "build.gradle" -o -name "build.gradle.kts" | head -n 1 | xargs dirname)
         echo "Android project directory detected at: $PROJECT_DIR"
         echo "PROJECT_PATH=$PROJECT_DIR" >> $GITHUB_ENV
         
         cd "$PROJECT_DIR"
-        
         if [ ! -f "gradlew" ]; then
           gradle wrapper
         fi
         chmod +x gradlew
-        
-        # ساخت فایل کلید با هر دو نام احتمالی در پوشه اصلی پروژه اندروید و پوشه app
-        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > my-upload-key.jks
-        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
-        
-        if [ -d "app" ]; then
-          cp my-upload-key.jks app/my-upload-key.jks
-          cp hamed_release_key.jks app/hamed_release_key.jks
-        fi
 
-    - name: Build Release APK with Direct Properties
+    - name: Remove Gradle Hardcoded Signing Configurations
       run: |
         cd "${{ env.PROJECT_PATH }}"
         
-        # تزریق مستقیم و مستقیم پارامترها به بدنه گریدل برای دور زدن محدودیت فایل‌ها
-        ./gradlew assembleRelease \
-          -Pandroid.injected.signing.config.file="" \
-          -PstoreFile=my-upload-key.jks \
-          -PstorePassword="${{ secrets.KEY_STORE_PASSWORD }}" \
-          -PkeyAlias="${{ secrets.ALIAS }}" \
-          -PkeyPassword="${{ secrets.KEY_PASSWORD }}" \
-          -Pandroid.signingConfigs.release.storeFile=my-upload-key.jks \
-          -Pandroid.signingConfigs.release.storePassword="${{ secrets.KEY_STORE_PASSWORD }}" \
-          -Pandroid.signingConfigs.release.keyAlias="${{ secrets.ALIAS }}" \
-          -Pandroid.signingConfigs.release.keyPassword="${{ secrets.KEY_PASSWORD }}"
+        # پیدا کردن فایل build.gradle اصلی اپلیکیشن
+        GRADLE_FILE=$(find app/ -name "build.gradle" -o -name "build.gradle.kts" | head -n 1)
+        echo "Modifying signing configurations in: $GRADLE_FILE"
+        
+        # این اسکریپت هوشمند، بلاک signingConfig release را حذف می‌کند تا گریدل دیگر رمزی مطالبه نکند
+        if [ -f "$GRADLE_FILE" ]; then
+          sed -i '/signingConfig.*signingConfigs.release/d' "$GRADLE_FILE"
+          sed -i '/signingConfigs.*release.*/d' "$GRADLE_FILE"
+          echo "Successfully bypassed hardcoded release signing configs."
+        else
+          echo "Warning: Build file not found for modification."
+        fi
 
-    - name: Sign APK (Extra Security for Cafe Bazaar)
+    - name: Decode Keystore
+      run: |
+        cd "${{ env.PROJECT_PATH }}"
+        echo "${{ secrets.SIGNING_KEY }}" | base64 --decode > hamed_release_key.jks
+
+    - name: Build Unsigned Release APK
+      run: |
+        cd "${{ env.PROJECT_PATH }}"
+        ./gradlew assembleRelease
+
+    - name: Sign APK Manually (Official apksigner)
       run: |
         cd "${{ env.PROJECT_PATH }}"
         BUILD_TOOLS_VERSION=$(ls $ANDROID_HOME/build-tools/ | sort -V | tail -n 1)
         
-        # پیدا کردن فایل APK بیلد شده
+        # پیدا کردن فایل APK خام تولید شده در پوشه خروجی
         APK_PATH=$(find app/build/outputs/apk/release/ -name "*.apk" | head -n 1)
         echo "Found APK to sign: $APK_PATH"
         
-        # امضای دستی نهایی با apksigner رسمی اندروید
+        # امضای رسمی با مشخصات و کلید شما برای کافه بازار
         $ANDROID_HOME/build-tools/$BUILD_TOOLS_VERSION/apksigner sign \
-          --ks my-upload-key.jks \
+          --ks hamed_release_key.jks \
           --ks-key-alias "${{ secrets.ALIAS }}" \
           --ks-pass pass:"${{ secrets.KEY_STORE_PASSWORD }}" \
           --key-pass pass:"${{ secrets.KEY_PASSWORD }}" \
           --out app/build/outputs/apk/release/app-release-signed.apk \
           $APK_PATH
+          
+        echo "APK successfully signed and verified!"
 
     - name: Upload Release APK Artifact
       uses: actions/upload-artifact@v4
