@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.AppDatabase
+import com.example.data.RepeatMode
 import com.example.data.Task
 import com.example.data.TaskRepository
 import kotlinx.coroutines.flow.*
@@ -88,15 +89,45 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         _sortBy.value = option
     }
 
-    fun addTask(description: String, targetDate: Long, isCompleted: Boolean = false, hasAlarm: Boolean = false) {
+    fun addTask(
+        description: String,
+        targetDate: Long,
+        isCompleted: Boolean = false,
+        hasAlarm: Boolean = false,
+        repeatMode: String = RepeatMode.NONE.name
+    ) {
         viewModelScope.launch {
-            repository.insert(Task(description = description, targetDate = targetDate, isCompleted = isCompleted, hasAlarm = hasAlarm))
+            repository.insert(
+                Task(
+                    description = description,
+                    targetDate = targetDate,
+                    isCompleted = isCompleted,
+                    hasAlarm = hasAlarm,
+                    repeatMode = repeatMode
+                )
+            )
         }
     }
 
-    fun updateTask(id: Int, description: String, targetDate: Long, isCompleted: Boolean, hasAlarm: Boolean = false) {
+    fun updateTask(
+        id: Int,
+        description: String,
+        targetDate: Long,
+        isCompleted: Boolean,
+        hasAlarm: Boolean = false,
+        repeatMode: String = RepeatMode.NONE.name
+    ) {
         viewModelScope.launch {
-            repository.insert(Task(id = id, description = description, targetDate = targetDate, isCompleted = isCompleted, hasAlarm = hasAlarm))
+            repository.insert(
+                Task(
+                    id = id,
+                    description = description,
+                    targetDate = targetDate,
+                    isCompleted = isCompleted,
+                    hasAlarm = hasAlarm,
+                    repeatMode = repeatMode
+                )
+            )
         }
     }
 

@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.data.RepeatMode
 import com.example.data.Task
 import com.example.ui.theme.*
 import java.util.*
@@ -175,8 +176,8 @@ fun TaskApp(
     if (isAddSheetOpen) {
         TaskFormBottomSheet(
             onDismiss = { isAddSheetOpen = false },
-            onTaskSaved = { description, targetDate, isCompleted, hasAlarm ->
-                viewModel.addTask(description, targetDate, isCompleted, hasAlarm)
+            onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
+                viewModel.addTask(description, targetDate, isCompleted, hasAlarm, repeatMode)
                 isAddSheetOpen = false
             }
         )
@@ -187,8 +188,8 @@ fun TaskApp(
         TaskFormBottomSheet(
             task = editingTask,
             onDismiss = { editingTask = null },
-            onTaskSaved = { description, targetDate, isCompleted, hasAlarm ->
-                viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm)
+            onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
+                viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm, repeatMode)
                 editingTask = null
             }
         )
@@ -481,6 +482,23 @@ fun TaskRow(
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
+                        if (task.repeatMode != RepeatMode.NONE.name) {
+                            val repeatText = when (task.repeatMode) {
+                                RepeatMode.WEEKLY.name -> "هفتگی"
+                                RepeatMode.MONTHLY.name -> "ماهانه"
+                                RepeatMode.YEARLY.name -> "سالانه"
+                                else -> ""
+                            }
+                            if (repeatText.isNotEmpty()) {
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "($repeatText)",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -502,13 +520,14 @@ fun TaskRow(
 fun TaskFormBottomSheet(
     task: Task? = null,
     onDismiss: () -> Unit,
-    onTaskSaved: (description: String, targetDate: Long, isCompleted: Boolean, hasAlarm: Boolean) -> Unit
+    onTaskSaved: (description: String, targetDate: Long, isCompleted: Boolean, hasAlarm: Boolean, repeatMode: String) -> Unit
 ) {
     val context = LocalContext.current
     var description by remember { mutableStateOf(task?.description ?: "") }
     var selectedDate by remember { mutableStateOf(task?.targetDate ?: System.currentTimeMillis()) }
     var isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
     var setAlarm by remember { mutableStateOf(task?.hasAlarm ?: false) }
+    var repeatMode by remember { mutableStateOf(task?.repeatMode ?: RepeatMode.NONE.name) }
     var isDatePickerOpen by remember { mutableStateOf(false) }
 
     val formattedDate = remember(selectedDate) {
@@ -581,11 +600,29 @@ fun TaskFormBottomSheet(
                             modifier = Modifier.size(20.dp)
                         )
                         Spacer(modifier = Modifier.width(12.dp))
-                        Text(
-                            text = formattedDate,
-                            fontSize = 16.sp,
-                            color = MaterialTheme.colorScheme.onSurface
-                        )
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = formattedDate,
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            if (repeatMode != RepeatMode.NONE.name) {
+                                val repeatLabel = when (repeatMode) {
+                                    RepeatMode.WEEKLY.name -> "تکرار هفتگی"
+                                    RepeatMode.MONTHLY.name -> "تکرار ماهانه"
+                                    RepeatMode.YEARLY.name -> "تکرار سالانه"
+                                    else -> ""
+                                }
+                                if (repeatLabel.isNotEmpty()) {
+                                    Text(
+                                        text = repeatLabel,
+                                        fontSize = 12.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -640,9 +677,9 @@ fun TaskFormBottomSheet(
                     onClick = {
                         if (description.isNotBlank()) {
                             if (setAlarm) {
-                                setSystemAlarm(context, description, selectedDate)
+                                setSystemAlarm(context, description, selectedDate, repeatMode)
                             }
-                            onTaskSaved(description, selectedDate, isCompleted, setAlarm)
+                            onTaskSaved(description, selectedDate, isCompleted, setAlarm, repeatMode)
                         }
                     },
                     enabled = description.isNotBlank(),
@@ -672,9 +709,11 @@ fun TaskFormBottomSheet(
     if (isDatePickerOpen) {
         JalaliDatePickerDialog(
             initialMillis = selectedDate,
+            initialRepeatMode = repeatMode,
             onDismiss = { isDatePickerOpen = false },
-            onDateSelected = { newMillis ->
+            onDateSelected = { newMillis, newRepeatMode ->
                 selectedDate = newMillis
+                repeatMode = newRepeatMode
             }
         )
     }
@@ -683,8 +722,9 @@ fun TaskFormBottomSheet(
 @Composable
 fun JalaliDatePickerDialog(
     initialMillis: Long,
+    initialRepeatMode: String = RepeatMode.NONE.name,
     onDismiss: () -> Unit,
-    onDateSelected: (Long) -> Unit
+    onDateSelected: (Long, String) -> Unit
 ) {
     val initialDateTime = remember(initialMillis) {
         JalaliCalendarHelper.millisToJalali(initialMillis)
@@ -695,6 +735,7 @@ fun JalaliDatePickerDialog(
     var day by remember { mutableIntStateOf(initialDateTime.day) }
     var hour by remember { mutableIntStateOf(initialDateTime.hour) }
     var minute by remember { mutableIntStateOf(initialDateTime.minute) }
+    var repeatMode by remember { mutableStateOf(initialRepeatMode) }
 
     val daysInMonth = remember(year, month) {
         JalaliCalendarHelper.getDaysInJalaliMonth(year, month)
@@ -717,7 +758,7 @@ fun JalaliDatePickerDialog(
                 Button(
                     onClick = {
                         val millis = JalaliCalendarHelper.jalaliToMillis(year, month, day, hour, minute)
-                        onDateSelected(millis)
+                        onDateSelected(millis, repeatMode)
                         onDismiss()
                     },
                     modifier = Modifier.testTag("date_picker_confirm")
@@ -864,6 +905,42 @@ fun JalaliDatePickerDialog(
 
                     HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
+                    // Repeat Options Selection
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.Start
+                    ) {
+                        Text(
+                            text = "تنظیم تکرار آلارم:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(RepeatMode.values()) { mode ->
+                                val isSelected = mode.name == repeatMode
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { repeatMode = mode.name },
+                                    label = { Text(mode.title, fontSize = 11.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
                     // Time Selector (Hour & Minute)
                     Column(
                         modifier = Modifier.fillMaxWidth(),
@@ -963,22 +1040,42 @@ fun JalaliDatePickerDialog(
     }
 }
 
-private fun setSystemAlarm(context: Context, title: String, timestamp: Long) {
+private fun setSystemAlarm(context: Context, title: String, timestamp: Long, repeatMode: String = RepeatMode.NONE.name) {
     val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
     val hour = cal.get(Calendar.HOUR_OF_DAY)
     val minute = cal.get(Calendar.MINUTE)
 
+    val alarmMessage = when (repeatMode) {
+        RepeatMode.WEEKLY.name -> "$title (تکرار هفتگی)"
+        RepeatMode.MONTHLY.name -> "$title (تکرار ماهانه)"
+        RepeatMode.YEARLY.name -> "$title (تکرار سالانه)"
+        else -> title
+    }
+
     val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-        putExtra(AlarmClock.EXTRA_MESSAGE, title)
+        putExtra(AlarmClock.EXTRA_MESSAGE, alarmMessage)
         putExtra(AlarmClock.EXTRA_HOUR, hour)
         putExtra(AlarmClock.EXTRA_MINUTES, minute)
         putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+
+        if (repeatMode == RepeatMode.WEEKLY.name) {
+            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
+            val days = arrayListOf(dayOfWeek)
+            putExtra(AlarmClock.EXTRA_DAYS, days)
+        }
+
         flags = Intent.FLAG_ACTIVITY_NEW_TASK
     }
 
     try {
         context.startActivity(intent)
-        Toast.makeText(context, "هشدار در ساعت گوشی تنظیم شد", Toast.LENGTH_SHORT).show()
+        val toastText = when (repeatMode) {
+            RepeatMode.WEEKLY.name -> "هشدار با تکرار هفتگی در گوشی تنظیم شد"
+            RepeatMode.MONTHLY.name -> "هشدار با تکرار ماهانه در گوشی تنظیم شد"
+            RepeatMode.YEARLY.name -> "هشدار با تکرار سالانه در گوشی تنظیم شد"
+            else -> "هشدار در ساعت گوشی تنظیم شد"
+        }
+        Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
     } catch (e: Exception) {
         Toast.makeText(context, "امکان تنظیم آلارم در این دستگاه وجود ندارد", Toast.LENGTH_SHORT).show()
     }
