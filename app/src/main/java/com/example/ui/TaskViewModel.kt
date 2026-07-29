@@ -94,18 +94,19 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         targetDate: Long,
         isCompleted: Boolean = false,
         hasAlarm: Boolean = false,
-        repeatMode: String = RepeatMode.NONE.name
+        repeatMode: String = RepeatMode.NONE.name,
+        onSaved: ((Task) -> Unit)? = null
     ) {
         viewModelScope.launch {
-            repository.insert(
-                Task(
-                    description = description,
-                    targetDate = targetDate,
-                    isCompleted = isCompleted,
-                    hasAlarm = hasAlarm,
-                    repeatMode = repeatMode
-                )
+            val newTask = Task(
+                description = description,
+                targetDate = targetDate,
+                isCompleted = isCompleted,
+                hasAlarm = hasAlarm,
+                repeatMode = repeatMode
             )
+            val newId = repository.insert(newTask)
+            onSaved?.invoke(newTask.copy(id = newId.toInt()))
         }
     }
 
@@ -115,19 +116,20 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         targetDate: Long,
         isCompleted: Boolean,
         hasAlarm: Boolean = false,
-        repeatMode: String = RepeatMode.NONE.name
+        repeatMode: String = RepeatMode.NONE.name,
+        onSaved: ((Task) -> Unit)? = null
     ) {
         viewModelScope.launch {
-            repository.insert(
-                Task(
-                    id = id,
-                    description = description,
-                    targetDate = targetDate,
-                    isCompleted = isCompleted,
-                    hasAlarm = hasAlarm,
-                    repeatMode = repeatMode
-                )
+            val updatedTask = Task(
+                id = id,
+                description = description,
+                targetDate = targetDate,
+                isCompleted = isCompleted,
+                hasAlarm = hasAlarm,
+                repeatMode = repeatMode
             )
+            repository.insert(updatedTask)
+            onSaved?.invoke(updatedTask)
         }
     }
 

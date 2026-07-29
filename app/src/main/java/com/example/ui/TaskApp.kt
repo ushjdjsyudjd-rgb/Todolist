@@ -32,6 +32,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.example.alarm.TaskAlarmManager
 import com.example.data.RepeatMode
 import com.example.data.Task
 import com.example.ui.theme.*
@@ -44,7 +45,10 @@ fun TaskApp(
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
-    var isDarkTheme by remember { mutableStateOf(true) }
+    val sharedPrefs = remember { context.getSharedPreferences("app_settings", Context.MODE_PRIVATE) }
+    var isDarkTheme by remember {
+        mutableStateOf(sharedPrefs.getBoolean("is_dark_theme", true))
+    }
 
     MyApplicationTheme(darkTheme = isDarkTheme) {
         CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -73,7 +77,11 @@ fun TaskApp(
                         },
                         actions = {
                             IconButton(
-                                onClick = { isDarkTheme = !isDarkTheme },
+                                onClick = {
+                                    val nextTheme = !isDarkTheme
+                                    isDarkTheme = nextTheme
+                                    sharedPrefs.edit().putBoolean("is_dark_theme", nextTheme).apply()
+                                },
                                 modifier = Modifier.testTag("theme_toggle_button")
                             ) {
                                 Icon(
@@ -191,7 +199,20 @@ fun TaskApp(
                     TaskFormBottomSheet(
                         onDismiss = { isAddSheetOpen = false },
                         onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
-                            viewModel.addTask(description, targetDate, isCompleted, hasAlarm, repeatMode)
+                            viewModel.addTask(description, targetDate, isCompleted, hasAlarm, repeatMode) { savedTask ->
+                                if (hasAlarm) {
+                                    TaskAlarmManager.scheduleAlarm(
+                                        context,
+                                        savedTask.id,
+                                        savedTask.description,
+                                        savedTask.targetDate,
+                                        savedTask.repeatMode
+                                    )
+                                    Toast.makeText(context, "هشدار برای این کار تنظیم شد", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    TaskAlarmManager.cancelAlarm(context, savedTask.id)
+                                }
+                            }
                             isAddSheetOpen = false
                         }
                     )
@@ -203,7 +224,20 @@ fun TaskApp(
                         task = editingTask,
                         onDismiss = { editingTask = null },
                         onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
-                            viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm, repeatMode)
+                            viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm, repeatMode) { savedTask ->
+                                if (hasAlarm) {
+                                    TaskAlarmManager.scheduleAlarm(
+                                        context,
+                                        savedTask.id,
+                                        savedTask.description,
+                                        savedTask.targetDate,
+                                        savedTask.repeatMode
+                                    )
+                                    Toast.makeText(context, "هشدار به روز شد", Toast.LENGTH_SHORT).show()
+                                } else {
+                                    TaskAlarmManager.cancelAlarm(context, savedTask.id)
+                                }
+                            }
                             editingTask = null
                         }
                     )
@@ -240,7 +274,7 @@ fun TaskApp(
                                     val taskToDelete = tasks.find { it.id == taskId }
                                     if (taskToDelete != null) {
                                         if (taskToDelete.hasAlarm) {
-                                            dismissSystemAlarm(context, taskToDelete)
+                                            TaskAlarmManager.cancelAlarm(context, taskToDelete.id)
                                         }
                                         viewModel.deleteTask(taskId)
                                     }
@@ -698,9 +732,6 @@ fun TaskFormBottomSheet(
                 Button(
                     onClick = {
                         if (description.isNotBlank()) {
-                            if (setAlarm) {
-                                setSystemAlarm(context, description, selectedDate, repeatMode)
-                            }
                             onTaskSaved(description, selectedDate, isCompleted, setAlarm, repeatMode)
                         }
                     },
@@ -1059,85 +1090,6 @@ fun JalaliDatePickerDialog(
             },
             containerColor = MaterialTheme.colorScheme.surface
         )
-    }
-}
-
-private fun setSystemAlarm(context: Context, title: String, timestamp: Long, repeatMode: String = RepeatMode.NONE.name) {
-    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
-    val hour = cal.get(Calendar.HOUR_OF_DAY)
-    val minute = cal.get(Calendar.MINUTE)
-
-    val alarmMessage = when (repeatMode) {
-        RepeatMode.WEEKLY.name -> "$title (تکرار هفتگی)"
-        RepeatMode.MONTHLY.name -> "$title (تکرار ماهانه)"
-        RepeatMode.YEARLY.name -> "$title (تکرار سالانه)"
-        else -> title
-    }
-
-    val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
-        putExtra(AlarmClock.EXTRA_MESSAGE, alarmMessage)
-        putExtra(AlarmClock.EXTRA_HOUR, hour)
-        putExtra(AlarmClock.EXTRA_MINUTES, minute)
-        putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-
-        if (repeatMode == RepeatMode.WEEKLY.name) {
-            val dayOfWeek = cal.get(Calendar.DAY_OF_WEEK)
-            val days = arrayListOf(dayOfWeek)
-            putExtra(AlarmClock.EXTRA_DAYS, days)
-        }
-
-        flags = Intent.FLAG_ACTIVITY_NEW_TASK
-    }
-
-    try {
-        context.startActivity(intent)
-        val toastText = when (repeatMode) {
-            RepeatMode.WEEKLY.name -> "هشدار با تکرار هفتگی در گوشی تنظیم شد"
-            RepeatMode.MONTHLY.name -> "هشدار با تکرار ماهانه در گوشی تنظیم شد"
-            RepeatMode.YEARLY.name -> "هشدار با تکرار سالانه در گوشی تنظیم شد"
-            else -> "هشدار در ساعت گوشی تنظیم شد"
-        }
-        Toast.makeText(context, toastText, Toast.LENGTH_SHORT).show()
-    } catch (e: Exception) {
-        Toast.makeText(context, "امکان تنظیم آلارم در این دستگاه وجود ندارد", Toast.LENGTH_SHORT).show()
-    }
-}
-
-private fun dismissSystemAlarm(context: Context, task: Task) {
-    if (!task.hasAlarm) return
-
-    val cal = Calendar.getInstance().apply { timeInMillis = task.targetDate }
-    val hour = cal.get(Calendar.HOUR_OF_DAY)
-    val minute = cal.get(Calendar.MINUTE)
-
-    val alarmMessage = when (task.repeatMode) {
-        RepeatMode.WEEKLY.name -> "${task.description} (تکرار هفتگی)"
-        RepeatMode.MONTHLY.name -> "${task.description} (تکرار ماهانه)"
-        RepeatMode.YEARLY.name -> "${task.description} (تکرار سالانه)"
-        else -> task.description
-    }
-
-    try {
-        val intentByLabel = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
-            putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
-            putExtra(AlarmClock.EXTRA_MESSAGE, alarmMessage)
-            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK
-        }
-        context.startActivity(intentByLabel)
-    } catch (e: Exception) {
-        try {
-            val intentByTime = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
-                putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
-                putExtra(AlarmClock.EXTRA_HOUR, hour)
-                putExtra(AlarmClock.EXTRA_MINUTES, minute)
-                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            }
-            context.startActivity(intentByTime)
-        } catch (e2: Exception) {
-            // Dismiss alarm not supported on this device
-        }
     }
 }
 
