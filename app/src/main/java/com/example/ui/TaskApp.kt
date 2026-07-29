@@ -43,57 +43,74 @@ fun TaskApp(
     viewModel: TaskViewModel = viewModel(),
     modifier: Modifier = Modifier
 ) {
-    val tasks by viewModel.uiState.collectAsStateWithLifecycle()
-    val filterDueDate by viewModel.filterDueDate.collectAsStateWithLifecycle()
-    val filterCompletion by viewModel.filterCompletion.collectAsStateWithLifecycle()
-    val sortBy by viewModel.sortBy.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var isDarkTheme by remember { mutableStateOf(true) }
 
-    var isAddSheetOpen by remember { mutableStateOf(false) }
-    var editingTask by remember { mutableStateOf<Task?>(null) }
-    var pendingDeletionTaskId by remember { mutableStateOf<Int?>(null) }
+    MyApplicationTheme(darkTheme = isDarkTheme) {
+        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+            val tasks by viewModel.uiState.collectAsStateWithLifecycle()
+            val filterDueDate by viewModel.filterDueDate.collectAsStateWithLifecycle()
+            val filterCompletion by viewModel.filterCompletion.collectAsStateWithLifecycle()
+            val sortBy by viewModel.sortBy.collectAsStateWithLifecycle()
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = MaterialTheme.colorScheme.background,
-        topBar = {
-            CenterAlignedTopAppBar(
-                title = {
-                    Text(
-                        text = "لیست کارها",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 22.sp,
-                        color = MaterialTheme.colorScheme.onBackground
+            var isAddSheetOpen by remember { mutableStateOf(false) }
+            var editingTask by remember { mutableStateOf<Task?>(null) }
+            var pendingDeletionTaskId by remember { mutableStateOf<Int?>(null) }
+
+            Scaffold(
+                modifier = modifier.fillMaxSize(),
+                containerColor = MaterialTheme.colorScheme.background,
+                floatingActionButtonPosition = FabPosition.Start,
+                topBar = {
+                    CenterAlignedTopAppBar(
+                        title = {
+                            Text(
+                                text = "لیست کارها",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 22.sp,
+                                color = MaterialTheme.colorScheme.onBackground
+                            )
+                        },
+                        actions = {
+                            IconButton(
+                                onClick = { isDarkTheme = !isDarkTheme },
+                                modifier = Modifier.testTag("theme_toggle_button")
+                            ) {
+                                Icon(
+                                    imageVector = if (isDarkTheme) Icons.Default.NightlightRound else Icons.Default.NightsStay,
+                                    contentDescription = if (isDarkTheme) "تغییر به تم سفید" else "تغییر به تم تاریک",
+                                    tint = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        },
+                        colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
+                            containerColor = MaterialTheme.colorScheme.background
+                        )
                     )
                 },
-                colors = TopAppBarDefaults.centerAlignedTopAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background
-                )
-            )
-        },
-        floatingActionButton = {
-            FloatingActionButton(
-                onClick = { isAddSheetOpen = true },
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                shape = RoundedCornerShape(16.dp),
-                modifier = Modifier
-                    .padding(16.dp)
-                    .testTag("add_task_fab")
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "افزودن کار جدید",
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-        }
-    ) { innerPadding ->
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(innerPadding)
-            ) {
+                floatingActionButton = {
+                    FloatingActionButton(
+                        onClick = { isAddSheetOpen = true },
+                        containerColor = MaterialTheme.colorScheme.primary,
+                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                        shape = RoundedCornerShape(16.dp),
+                        modifier = Modifier
+                            .padding(16.dp)
+                            .testTag("add_task_fab")
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "افزودن کار جدید",
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+                }
+            ) { innerPadding ->
+                Column(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(innerPadding)
+                ) {
                 // Horizontal filter and sort dashboard
                 FilterAndSortHeader(
                     currentDueDateFilter = filterDueDate,
@@ -168,85 +185,90 @@ fun TaskApp(
                         }
                     }
                 }
-            }
-        }
-    }
 
-    // Modal Bottom Sheet for Adding Tasks
-    if (isAddSheetOpen) {
-        TaskFormBottomSheet(
-            onDismiss = { isAddSheetOpen = false },
-            onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
-                viewModel.addTask(description, targetDate, isCompleted, hasAlarm, repeatMode)
-                isAddSheetOpen = false
-            }
-        )
-    }
-
-    // Modal Bottom Sheet for Editing Tasks
-    if (editingTask != null) {
-        TaskFormBottomSheet(
-            task = editingTask,
-            onDismiss = { editingTask = null },
-            onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
-                viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm, repeatMode)
-                editingTask = null
-            }
-        )
-    }
-
-    // Custom RTL Confirmation Dialog
-    if (pendingDeletionTaskId != null) {
-        val taskId = pendingDeletionTaskId!!
-        CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
-            AlertDialog(
-                onDismissRequest = { pendingDeletionTaskId = null },
-                containerColor = MaterialTheme.colorScheme.surface,
-                title = {
-                    Text(
-                        text = "تایید عملیات",
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
+                // Modal Bottom Sheet for Adding Tasks
+                if (isAddSheetOpen) {
+                    TaskFormBottomSheet(
+                        onDismiss = { isAddSheetOpen = false },
+                        onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
+                            viewModel.addTask(description, targetDate, isCompleted, hasAlarm, repeatMode)
+                            isAddSheetOpen = false
+                        }
                     )
-                },
-                text = {
-                    Text(
-                        text = "مطمئن هستید کار مورد نظر انجام شده؟",
-                        fontSize = 16.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.fillMaxWidth(),
-                        textAlign = TextAlign.Start
-                    )
-                },
-                confirmButton = {
-                    TextButton(
-                        onClick = {
-                            viewModel.deleteTask(taskId)
-                            pendingDeletionTaskId = null
-                        },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Text("بله، انجام شده", fontWeight = FontWeight.Bold)
-                    }
-                },
-                dismissButton = {
-                    TextButton(
-                        onClick = { pendingDeletionTaskId = null },
-                        colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    ) {
-                        Text("انصراف")
-                    }
                 }
-            )
+
+                // Modal Bottom Sheet for Editing Tasks
+                if (editingTask != null) {
+                    TaskFormBottomSheet(
+                        task = editingTask,
+                        onDismiss = { editingTask = null },
+                        onTaskSaved = { description, targetDate, isCompleted, hasAlarm, repeatMode ->
+                            viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm, repeatMode)
+                            editingTask = null
+                        }
+                    )
+                }
+
+                // Custom RTL Confirmation Dialog
+                if (pendingDeletionTaskId != null) {
+                    val taskId = pendingDeletionTaskId!!
+                    AlertDialog(
+                        onDismissRequest = { pendingDeletionTaskId = null },
+                        containerColor = MaterialTheme.colorScheme.surface,
+                        title = {
+                            Text(
+                                text = "تایید عملیات",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 18.sp,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start
+                            )
+                        },
+                        text = {
+                            Text(
+                                text = "مطمئن هستید کار مورد نظر انجام شده؟",
+                                fontSize = 16.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.fillMaxWidth(),
+                                textAlign = TextAlign.Start
+                            )
+                        },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    val taskToDelete = tasks.find { it.id == taskId }
+                                    if (taskToDelete != null) {
+                                        if (taskToDelete.hasAlarm) {
+                                            dismissSystemAlarm(context, taskToDelete)
+                                        }
+                                        viewModel.deleteTask(taskId)
+                                    }
+                                    pendingDeletionTaskId = null
+                                },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                Text("بله، انجام شده", fontWeight = FontWeight.Bold)
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(
+                                onClick = { pendingDeletionTaskId = null },
+                                colors = ButtonDefaults.textButtonColors(
+                                    contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            ) {
+                                Text("انصراف")
+                            }
+                        }
+                    )
+                }
+            }
         }
     }
+}
 }
 
 @Composable
@@ -1080,3 +1102,42 @@ private fun setSystemAlarm(context: Context, title: String, timestamp: Long, rep
         Toast.makeText(context, "امکان تنظیم آلارم در این دستگاه وجود ندارد", Toast.LENGTH_SHORT).show()
     }
 }
+
+private fun dismissSystemAlarm(context: Context, task: Task) {
+    if (!task.hasAlarm) return
+
+    val cal = Calendar.getInstance().apply { timeInMillis = task.targetDate }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    val minute = cal.get(Calendar.MINUTE)
+
+    val alarmMessage = when (task.repeatMode) {
+        RepeatMode.WEEKLY.name -> "${task.description} (تکرار هفتگی)"
+        RepeatMode.MONTHLY.name -> "${task.description} (تکرار ماهانه)"
+        RepeatMode.YEARLY.name -> "${task.description} (تکرار سالانه)"
+        else -> task.description
+    }
+
+    try {
+        val intentByLabel = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
+            putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_LABEL)
+            putExtra(AlarmClock.EXTRA_MESSAGE, alarmMessage)
+            putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK
+        }
+        context.startActivity(intentByLabel)
+    } catch (e: Exception) {
+        try {
+            val intentByTime = Intent(AlarmClock.ACTION_DISMISS_ALARM).apply {
+                putExtra(AlarmClock.EXTRA_ALARM_SEARCH_MODE, AlarmClock.ALARM_SEARCH_MODE_TIME)
+                putExtra(AlarmClock.EXTRA_HOUR, hour)
+                putExtra(AlarmClock.EXTRA_MINUTES, minute)
+                putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK
+            }
+            context.startActivity(intentByTime)
+        } catch (e2: Exception) {
+            // Dismiss alarm not supported on this device
+        }
+    }
+}
+
