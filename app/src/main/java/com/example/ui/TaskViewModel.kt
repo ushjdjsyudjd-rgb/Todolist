@@ -88,15 +88,15 @@ class TaskViewModel(application: Application) : AndroidViewModel(application) {
         _sortBy.value = option
     }
 
-    fun addTask(description: String, targetDate: Long, isCompleted: Boolean = false) {
+    fun addTask(description: String, targetDate: Long, isCompleted: Boolean = false, hasAlarm: Boolean = false) {
         viewModelScope.launch {
-            repository.insert(Task(description = description, targetDate = targetDate, isCompleted = isCompleted))
+            repository.insert(Task(description = description, targetDate = targetDate, isCompleted = isCompleted, hasAlarm = hasAlarm))
         }
     }
 
-    fun updateTask(id: Int, description: String, targetDate: Long, isCompleted: Boolean) {
+    fun updateTask(id: Int, description: String, targetDate: Long, isCompleted: Boolean, hasAlarm: Boolean = false) {
         viewModelScope.launch {
-            repository.insert(Task(id = id, description = description, targetDate = targetDate, isCompleted = isCompleted))
+            repository.insert(Task(id = id, description = description, targetDate = targetDate, isCompleted = isCompleted, hasAlarm = hasAlarm))
         }
     }
 

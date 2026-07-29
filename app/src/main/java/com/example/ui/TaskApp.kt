@@ -1,5 +1,9 @@
 package com.example.ui
 
+import android.content.Context
+import android.content.Intent
+import android.provider.AlarmClock
+import android.widget.Toast
 import androidx.compose.animation.*
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
@@ -18,6 +22,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
@@ -29,7 +34,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.Task
 import com.example.ui.theme.*
-import java.text.SimpleDateFormat
 import java.util.*
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -149,6 +153,10 @@ fun TaskApp(
                                     onCheckedChange = { isChecked ->
                                         if (isChecked) {
                                             pendingDeletionTaskId = task.id
+                                        } else {
+                                            if (pendingDeletionTaskId == task.id) {
+                                                pendingDeletionTaskId = null
+                                            }
                                         }
                                     },
                                     onClick = {
@@ -167,8 +175,8 @@ fun TaskApp(
     if (isAddSheetOpen) {
         TaskFormBottomSheet(
             onDismiss = { isAddSheetOpen = false },
-            onTaskSaved = { description, targetDate, isCompleted ->
-                viewModel.addTask(description, targetDate, isCompleted)
+            onTaskSaved = { description, targetDate, isCompleted, hasAlarm ->
+                viewModel.addTask(description, targetDate, isCompleted, hasAlarm)
                 isAddSheetOpen = false
             }
         )
@@ -179,8 +187,8 @@ fun TaskApp(
         TaskFormBottomSheet(
             task = editingTask,
             onDismiss = { editingTask = null },
-            onTaskSaved = { description, targetDate, isCompleted ->
-                viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted)
+            onTaskSaved = { description, targetDate, isCompleted, hasAlarm ->
+                viewModel.updateTask(editingTask!!.id, description, targetDate, isCompleted, hasAlarm)
                 editingTask = null
             }
         )
@@ -220,21 +228,19 @@ fun TaskApp(
                         },
                         colors = ButtonDefaults.textButtonColors(
                             contentColor = MaterialTheme.colorScheme.primary
-                        ),
-                        modifier = Modifier.testTag("dialog_confirm_button")
+                        )
                     ) {
-                        Text(text = "بله", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("بله، انجام شده", fontWeight = FontWeight.Bold)
                     }
                 },
                 dismissButton = {
                     TextButton(
                         onClick = { pendingDeletionTaskId = null },
                         colors = ButtonDefaults.textButtonColors(
-                            contentColor = MaterialTheme.colorScheme.error
-                        ),
-                        modifier = Modifier.testTag("dialog_dismiss_button")
+                            contentColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     ) {
-                        Text(text = "خیر", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                        Text("انصراف")
                     }
                 }
             )
@@ -251,136 +257,143 @@ fun FilterAndSortHeader(
 ) {
     var isExpanded by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
-            .background(MaterialTheme.colorScheme.surface, RoundedCornerShape(16.dp))
-            .padding(12.dp)
-    ) {
-        Row(
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        Column(
             modifier = Modifier
                 .fillMaxWidth()
-                .clickable { isExpanded = !isExpanded },
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
+                .padding(horizontal = 16.dp, vertical = 8.dp)
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = "فیلترها",
-                    tint = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.size(20.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "فیلترها و مرتب‌سازی",
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 15.sp,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-            }
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                // Short badge summarizing current state
-                Text(
-                    text = when (currentDueDateFilter) {
-                        DueDateFilter.ALL -> "همه"
-                        DueDateFilter.TODAY -> "امروز"
-                        DueDateFilter.UPCOMING -> "آینده"
-                        DueDateFilter.OVERDUE -> "معوقه"
-                    },
-                    fontSize = 12.sp,
-                    color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier
-                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.1f), RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 4.dp)
-                )
-                Spacer(modifier = Modifier.width(8.dp))
-                Icon(
-                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                    contentDescription = if (isExpanded) "بستن" else "باز کردن",
-                    tint = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-        }
-
-        AnimatedVisibility(
-            visible = isExpanded,
-            enter = expandVertically() + fadeIn(),
-            exit = shrinkVertically() + fadeOut()
-        ) {
-            Column(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(top = 16.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                // 1. Due Date Filter Row
-                Column {
-                    Text(
-                        text = "بازه زمانی:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    LazyRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        items(DueDateFilter.values()) { filter ->
-                            val label = when (filter) {
-                                DueDateFilter.ALL -> "همه تاریخ‌ها"
-                                DueDateFilter.TODAY -> "امروز"
-                                DueDateFilter.UPCOMING -> "آینده"
-                                DueDateFilter.OVERDUE -> "معوقه"
-                            }
-                            val isSelected = filter == currentDueDateFilter
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onDueDateFilterChange(filter) },
-                                label = { Text(label, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            )
+                // Quick Filter Chips Row
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.weight(1f)
+                ) {
+                    items(DueDateFilter.values()) { filter ->
+                        val label = when (filter) {
+                            DueDateFilter.ALL -> "همه زمان‌ها"
+                            DueDateFilter.TODAY -> "امروز"
+                            DueDateFilter.UPCOMING -> "آینده"
+                            DueDateFilter.OVERDUE -> "گذشته"
                         }
+                        val isSelected = filter == currentDueDateFilter
+                        FilterChip(
+                            selected = isSelected,
+                            onClick = { onDueDateFilterChange(filter) },
+                            label = { Text(label, fontSize = 12.sp) },
+                            colors = FilterChipDefaults.filterChipColors(
+                                selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
                     }
                 }
 
-                // 2. Sort Options Row
-                Column {
-                    Text(
-                        text = "مرتب‌سازی بر اساس:",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                Spacer(modifier = Modifier.width(8.dp))
+
+                IconButton(
+                    onClick = { isExpanded = !isExpanded },
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(
+                            if (isExpanded) MaterialTheme.colorScheme.primaryContainer
+                            else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                        )
+                ) {
+                    Icon(
+                        imageVector = if (isExpanded) Icons.Default.FilterListOff else Icons.Default.FilterList,
+                        contentDescription = "تنظیمات فیلتر",
+                        tint = if (isExpanded) MaterialTheme.colorScheme.onPrimaryContainer
+                        else MaterialTheme.colorScheme.onSurfaceVariant
                     )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        SortOption.values().forEach { option ->
-                            val label = when (option) {
-                                SortOption.DUE_DATE -> "تاریخ انجام"
-                                SortOption.DESCRIPTION -> "توضیحات"
-                                SortOption.CREATION -> "ترتیب ثبت"
-                            }
-                            val isSelected = option == currentSortOption
-                            FilterChip(
-                                selected = isSelected,
-                                onClick = { onSortOptionChange(option) },
-                                label = { Text(label, fontSize = 12.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primary,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
-                                    containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-                                    labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                }
+            }
+
+            AnimatedVisibility(
+                visible = isExpanded,
+                enter = expandVertically() + fadeIn(),
+                exit = shrinkVertically() + fadeOut()
+            ) {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    // Due Date Filter Row
+                    Column {
+                        Text(
+                            text = "بازه زمانی:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            DueDateFilter.values().forEach { filter ->
+                                val label = when (filter) {
+                                    DueDateFilter.ALL -> "همه"
+                                    DueDateFilter.TODAY -> "امروز"
+                                    DueDateFilter.UPCOMING -> "آینده"
+                                    DueDateFilter.OVERDUE -> "عقب‌افتاده"
+                                }
+                                val isSelected = filter == currentDueDateFilter
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onDueDateFilterChange(filter) },
+                                    label = { Text(label, fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.primary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onPrimary,
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
                                 )
-                            )
+                            }
+                        }
+                    }
+
+                    // Sort Options Row
+                    Column {
+                        Text(
+                            text = "مرتب‌سازی بر اساس:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            SortOption.values().forEach { option ->
+                                val label = when (option) {
+                                    SortOption.DUE_DATE -> "تاریخ انجام"
+                                    SortOption.DESCRIPTION -> "عنوان کار"
+                                    SortOption.CREATION -> "زمان ساخت"
+                                }
+                                val isSelected = option == currentSortOption
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { onSortOptionChange(option) },
+                                    label = { Text(label, fontSize = 12.sp) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = MaterialTheme.colorScheme.secondary,
+                                        selectedLabelColor = MaterialTheme.colorScheme.onSecondary,
+                                        containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+                                        labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                )
+                            }
                         }
                     }
                 }
@@ -397,7 +410,7 @@ fun TaskRow(
     onClick: () -> Unit
 ) {
     val formattedDate = remember(task.targetDate) {
-        JalaliCalendarHelper.getJalaliDate(task.targetDate)
+        JalaliCalendarHelper.getJalaliDateTime(task.targetDate)
     }
 
     Card(
@@ -460,6 +473,15 @@ fun TaskRow(
                         fontSize = 13.sp,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (task.hasAlarm) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "آلارم فعال",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
                 }
             }
 
@@ -480,15 +502,17 @@ fun TaskRow(
 fun TaskFormBottomSheet(
     task: Task? = null,
     onDismiss: () -> Unit,
-    onTaskSaved: (description: String, targetDate: Long, isCompleted: Boolean) -> Unit
+    onTaskSaved: (description: String, targetDate: Long, isCompleted: Boolean, hasAlarm: Boolean) -> Unit
 ) {
+    val context = LocalContext.current
     var description by remember { mutableStateOf(task?.description ?: "") }
     var selectedDate by remember { mutableStateOf(task?.targetDate ?: System.currentTimeMillis()) }
     var isCompleted by remember { mutableStateOf(task?.isCompleted ?: false) }
+    var setAlarm by remember { mutableStateOf(task?.hasAlarm ?: false) }
     var isDatePickerOpen by remember { mutableStateOf(false) }
 
     val formattedDate = remember(selectedDate) {
-        JalaliCalendarHelper.getJalaliDate(selectedDate)
+        JalaliCalendarHelper.getJalaliDateTime(selectedDate)
     }
 
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
@@ -528,13 +552,13 @@ fun TaskFormBottomSheet(
                     shape = RoundedCornerShape(12.dp)
                 )
 
-                // Date Picker Trigger Row
+                // Jalali Date & Time Picker Trigger Row
                 Column(
                     modifier = Modifier.fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     Text(
-                        text = "تاریخ انجام کار",
+                        text = "تاریخ و زمان انجام کار (شمسی)",
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Medium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -552,7 +576,7 @@ fun TaskFormBottomSheet(
                     ) {
                         Icon(
                             imageVector = Icons.Default.CalendarToday,
-                            contentDescription = "انتخاب تاریخ",
+                            contentDescription = "انتخاب تاریخ و زمان",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(20.dp)
                         )
@@ -565,12 +589,60 @@ fun TaskFormBottomSheet(
                     }
                 }
 
+                // Alarm Switch Row
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Alarm,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(
+                                text = "تنظیم هشدار در برنامه ساعت گوشی",
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = MaterialTheme.colorScheme.onSurface
+                            )
+                            Text(
+                                text = "در زمان مشخص‌شده، آلارم گوشی فعال می‌شود",
+                                fontSize = 11.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Switch(
+                        checked = setAlarm,
+                        onCheckedChange = { setAlarm = it },
+                        colors = SwitchDefaults.colors(
+                            checkedThumbColor = MaterialTheme.colorScheme.onPrimary,
+                            checkedTrackColor = MaterialTheme.colorScheme.primary
+                        )
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(8.dp))
 
                 Button(
                     onClick = {
                         if (description.isNotBlank()) {
-                            onTaskSaved(description, selectedDate, isCompleted)
+                            if (setAlarm) {
+                                setSystemAlarm(context, description, selectedDate)
+                            }
+                            onTaskSaved(description, selectedDate, isCompleted, setAlarm)
                         }
                     },
                     enabled = description.isNotBlank(),
@@ -596,18 +668,57 @@ fun TaskFormBottomSheet(
         }
     }
 
-    // Material 3 System Date Picker Dialog
+    // Custom Shamsi / Jalali Date & Time Picker Dialog
     if (isDatePickerOpen) {
-        val datePickerState = rememberDatePickerState(
-            initialSelectedDateMillis = selectedDate
+        JalaliDatePickerDialog(
+            initialMillis = selectedDate,
+            onDismiss = { isDatePickerOpen = false },
+            onDateSelected = { newMillis ->
+                selectedDate = newMillis
+            }
         )
-        DatePickerDialog(
-            onDismissRequest = { isDatePickerOpen = false },
+    }
+}
+
+@Composable
+fun JalaliDatePickerDialog(
+    initialMillis: Long,
+    onDismiss: () -> Unit,
+    onDateSelected: (Long) -> Unit
+) {
+    val initialDateTime = remember(initialMillis) {
+        JalaliCalendarHelper.millisToJalali(initialMillis)
+    }
+
+    var year by remember { mutableIntStateOf(initialDateTime.year) }
+    var month by remember { mutableIntStateOf(initialDateTime.month) }
+    var day by remember { mutableIntStateOf(initialDateTime.day) }
+    var hour by remember { mutableIntStateOf(initialDateTime.hour) }
+    var minute by remember { mutableIntStateOf(initialDateTime.minute) }
+
+    val daysInMonth = remember(year, month) {
+        JalaliCalendarHelper.getDaysInJalaliMonth(year, month)
+    }
+
+    val firstDayOffset = remember(year, month) {
+        JalaliCalendarHelper.getFirstDayOfWeekForJalaliMonth(year, month)
+    }
+
+    LaunchedEffect(daysInMonth) {
+        if (day > daysInMonth) {
+            day = daysInMonth
+        }
+    }
+
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Rtl) {
+        AlertDialog(
+            onDismissRequest = onDismiss,
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
-                        selectedDate = datePickerState.selectedDateMillis ?: System.currentTimeMillis()
-                        isDatePickerOpen = false
+                        val millis = JalaliCalendarHelper.jalaliToMillis(year, month, day, hour, minute)
+                        onDateSelected(millis)
+                        onDismiss()
                     },
                     modifier = Modifier.testTag("date_picker_confirm")
                 ) {
@@ -616,18 +727,259 @@ fun TaskFormBottomSheet(
             },
             dismissButton = {
                 TextButton(
-                    onClick = { isDatePickerOpen = false },
+                    onClick = onDismiss,
                     modifier = Modifier.testTag("date_picker_cancel")
                 ) {
                     Text("لغو")
                 }
             },
-            colors = DatePickerDefaults.colors(
-                containerColor = MaterialTheme.colorScheme.surface
-            )
-        ) {
-            DatePicker(state = datePickerState)
-        }
+            title = {
+                Text(
+                    text = "انتخاب تاریخ و زمان (شمسی)",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+            },
+            text = {
+                Column(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    // Month & Year Navigation Header
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(12.dp))
+                            .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f))
+                            .padding(horizontal = 8.dp, vertical = 4.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(
+                            onClick = {
+                                if (month == 1) {
+                                    month = 12
+                                    year -= 1
+                                } else {
+                                    month -= 1
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronRight,
+                                contentDescription = "ماه قبل"
+                            )
+                        }
+
+                        Text(
+                            text = "${JalaliCalendarHelper.JALALI_MONTH_NAMES[month - 1]} $year",
+                            fontSize = 15.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+
+                        IconButton(
+                            onClick = {
+                                if (month == 12) {
+                                    month = 1
+                                    year += 1
+                                } else {
+                                    month += 1
+                                }
+                            }
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.ChevronLeft,
+                                contentDescription = "ماه بعد"
+                            )
+                        }
+                    }
+
+                    // Days of Week Header
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceAround
+                    ) {
+                        JalaliCalendarHelper.JALALI_WEEK_DAYS.forEach { weekDay ->
+                            Text(
+                                text = weekDay,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.primary,
+                                textAlign = TextAlign.Center,
+                                modifier = Modifier.width(32.dp)
+                            )
+                        }
+                    }
+
+                    // Days Grid
+                    val totalGridCells = firstDayOffset + daysInMonth
+                    val totalRows = (totalGridCells + 6) / 7
+
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        for (rowIndex in 0 until totalRows) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceAround
+                            ) {
+                                for (colIndex in 0..6) {
+                                    val cellIndex = rowIndex * 7 + colIndex
+                                    val dayNum = cellIndex - firstDayOffset + 1
+
+                                    if (cellIndex in firstDayOffset until (firstDayOffset + daysInMonth)) {
+                                        val isSelected = dayNum == day
+                                        Box(
+                                            modifier = Modifier
+                                                .size(32.dp)
+                                                .clip(RoundedCornerShape(8.dp))
+                                                .background(
+                                                    if (isSelected) MaterialTheme.colorScheme.primary
+                                                    else Color.Transparent
+                                                )
+                                                .clickable { day = dayNum },
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Text(
+                                                text = "$dayNum",
+                                                fontSize = 13.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
+                                                color = if (isSelected) MaterialTheme.colorScheme.onPrimary
+                                                else MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    } else {
+                                        Spacer(modifier = Modifier.size(32.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+                    // Time Selector (Hour & Minute)
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = "ساعت و دقیقه یادآوری:",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            // Hour Selector
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                IconButton(
+                                    onClick = { hour = if (hour == 0) 23 else hour - 1 },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "کاهش ساعت",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Text(
+                                    text = String.format("%02d", hour),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp)
+                                )
+                                IconButton(
+                                    onClick = { hour = (hour + 1) % 24 },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "افزایش ساعت",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+
+                            Text(":", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+
+                            // Minute Selector
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(8.dp))
+                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
+                            ) {
+                                IconButton(
+                                    onClick = { minute = if (minute == 0) 59 else minute - 1 },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Remove,
+                                        contentDescription = "کاهش دقیقه",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                                Text(
+                                    text = String.format("%02d", minute),
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp)
+                                )
+                                IconButton(
+                                    onClick = { minute = (minute + 1) % 60 },
+                                    modifier = Modifier.size(28.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Add,
+                                        contentDescription = "افزایش دقیقه",
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            containerColor = MaterialTheme.colorScheme.surface
+        )
     }
 }
 
+private fun setSystemAlarm(context: Context, title: String, timestamp: Long) {
+    val cal = Calendar.getInstance().apply { timeInMillis = timestamp }
+    val hour = cal.get(Calendar.HOUR_OF_DAY)
+    val minute = cal.get(Calendar.MINUTE)
+
+    val intent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+        putExtra(AlarmClock.EXTRA_MESSAGE, title)
+        putExtra(AlarmClock.EXTRA_HOUR, hour)
+        putExtra(AlarmClock.EXTRA_MINUTES, minute)
+        putExtra(AlarmClock.EXTRA_SKIP_UI, true)
+        flags = Intent.FLAG_ACTIVITY_NEW_TASK
+    }
+
+    try {
+        context.startActivity(intent)
+        Toast.makeText(context, "هشدار در ساعت گوشی تنظیم شد", Toast.LENGTH_SHORT).show()
+    } catch (e: Exception) {
+        Toast.makeText(context, "امکان تنظیم آلارم در این دستگاه وجود ندارد", Toast.LENGTH_SHORT).show()
+    }
+}
